@@ -12,6 +12,7 @@
             height: 100%;
             background-color: #3a3a3a;
             background-image: linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.4));
+            z-index: 1000;
         }
         #instructions {
             width: 100%;
@@ -122,7 +123,7 @@
             position:absolute;
             top:10px;
             right:10px;
-            z-index:200;
+            z-index:1001; /* Ensure it's above game but below blocker */
         }
         #world-controls button {
             font-size:16px;
@@ -137,7 +138,7 @@
         #ai-builder-modal {
             display: none;
             position: fixed;
-            z-index: 1001;
+            z-index: 1002; /* Higher than blocker */
             left: 0;
             top: 0;
             width: 100%;
@@ -226,7 +227,7 @@
             justify-content: space-between;
             align-items: center;
             pointer-events: none;
-            z-index: 1000;
+            z-index: 999;
             padding: 0 20px;
             box-sizing: border-box;
         }
@@ -265,28 +266,20 @@
             font-weight: bold;
             text-shadow: 1px 1px #222;
         }
-        #mobile-world-controls {
+        #menu-btn {
+            display: none;
             position: fixed;
             top: 10px;
-            right: 10px;
+            left: 10px;
             z-index: 1001;
-            display: none;
-            gap: 10px;
-            pointer-events: auto;
-        }
-        #mobile-world-controls button {
-             width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            border: 2px solid white;
-            background: rgba(128, 128, 128, 0.5);
+            font-size: 16px;
+            padding: 8px 12px;
+            font-family: monospace;
+            cursor: pointer;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            background-color: #707070;
             color: white;
-            font-size: 20px;
-            font-weight: bold;
-            text-shadow: 1px 1px #222;
-            display: flex;
-            align-items: center;
-            justify-content: center;
         }
     </style>
 </head>
@@ -326,16 +319,18 @@
                     </label>
                 </div>
             </div>
+             <div id="world-controls">
+                <button id="ai-builder-btn">✨ AI Builder</button>
+                <button id="save-world-btn">Save World</button>
+                <button id="load-world-btn">Load World</button>
+                <input type="file" id="load-world-file" accept=".json" style="display:none;">
+            </div>
         </div>
     </div>
     <div id="crosshair"></div>
     <div id="inventory"></div>
-    <div id="world-controls">
-        <button id="ai-builder-btn">✨ AI Builder</button>
-        <button id="save-world-btn">Save World</button>
-        <button id="load-world-btn">Load World</button>
-        <input type="file" id="load-world-file" accept=".json" style="display:none;">
-    </div>
+    <button id="menu-btn">Menu</button>
+    
 
     <!-- Mobile Controls UI -->
     <div id="mobile-controls">
@@ -347,11 +342,6 @@
             <button id="mobile-place-btn">PLACE</button>
             <button id="mobile-break-btn">BREAK</button>
         </div>
-    </div>
-    <div id="mobile-world-controls">
-        <button id="mobile-ai-builder-btn">✨</button>
-        <button id="mobile-save-world-btn">💾</button>
-        <button id="mobile-load-world-btn">📂</button>
     </div>
 
     <!-- AI Builder Modal -->
@@ -657,19 +647,22 @@
             const playButton = document.getElementById('play-button');
             const sensitivitySlider = document.getElementById('sensitivity');
             const invertYCheckbox = document.getElementById('invertY');
-            const invertStrafeCheckbox = document.getElementById('invertStrafe'); // NEW
+            const invertStrafeCheckbox = document.getElementById('invertStrafe');
             const inventoryDiv = document.getElementById('inventory');
             fpsCounter = document.getElementById('fps-counter');
+            const menuButton = document.getElementById('menu-btn');
 
             const settings = loadSettings();
             controls.pointerSpeed = settings.sensitivity;
             controls.invertY = settings.invertY;
-            invertStrafe = settings.invertStrafe; // NEW
+            invertStrafe = settings.invertStrafe;
             sensitivitySlider.value = String(settings.sensitivity);
             invertYCheckbox.checked = settings.invertY;
-            invertStrafeCheckbox.checked = settings.invertStrafe; // NEW
+            invertStrafeCheckbox.checked = settings.invertStrafe;
 
-            playButton.addEventListener('click', () => controls.lock());
+            playButton.addEventListener('click', () => {
+                controls.lock();
+            });
             sensitivitySlider.addEventListener('input', (e) => {
                 controls.pointerSpeed = Number(e.target.value);
                 saveSettings();
@@ -678,23 +671,51 @@
                 controls.invertY = e.target.checked;
                 saveSettings();
             });
-            // NEW: Event listener for strafe switch
             invertStrafeCheckbox.addEventListener('change', (e) => {
                 invertStrafe = e.target.checked;
                 saveSettings();
             });
 
+            // --- Mobile vs PC Setup ---
+            if (isMobile) {
+                document.getElementById('mobile-controls').style.display = 'flex';
+                document.getElementById('crosshair').style.display = 'none';
+                menuButton.style.display = 'block';
 
-            controls.addEventListener('lock', () => {
-                instructions.style.display = 'none';
-                blocker.style.display = 'none';
-            });
-            controls.addEventListener('unlock', () => {
-                if (!isMobile) {
+                menuButton.addEventListener('click', () => {
+                    controls.unlock();
+                });
+
+                // Override lock/unlock for manual control on mobile
+                controls.lock = () => {
+                    blocker.style.display = 'none';
+                    controls.isLocked = true;
+                };
+                controls.unlock = () => {
+                    blocker.style.display = 'block';
+                    controls.isLocked = false;
+                };
+
+                // Disconnect default mouse listeners for mobile
+                controls.disconnect();
+                
+                // Add touch event listeners
+                document.body.addEventListener('touchstart', onTouchStart, { passive: false });
+                document.body.addEventListener('touchmove', onTouchMove, { passive: false });
+                document.body.addEventListener('touchend', onTouchEnd, { passive: false });
+
+            } else {
+                // PC-specific listeners
+                controls.addEventListener('lock', () => {
+                    instructions.style.display = 'none';
+                    blocker.style.display = 'none';
+                });
+                controls.addEventListener('unlock', () => {
                     blocker.style.display = 'block';
                     instructions.style.display = '';
-                }
-            });
+                });
+            }
+
             scene.add(controls.getObject());
 
             // --- World Save/Load ---
@@ -733,26 +754,6 @@
                     scene.add(grass);
                     objects.push(grass);
                 }
-            }
-
-            // --- Mobile Init ---
-            if (isMobile) {
-                document.getElementById('mobile-controls').style.display = 'flex';
-                document.getElementById('mobile-world-controls').style.display = 'flex';
-                document.getElementById('world-controls').style.display = 'none';
-                document.getElementById('blocker').style.display = 'none';
-                document.getElementById('crosshair').style.display = 'none';
-                controls.isLocked = true; // Pretend controls are locked
-
-                // Disable pointer lock functionality for mobile
-                controls.lock = () => {};
-                controls.unlock = () => {};
-                controls.connect = () => {}; // Prevent default mouse listeners
-                
-                // Add touch event listeners
-                document.body.addEventListener('touchstart', onTouchStart, { passive: false });
-                document.body.addEventListener('touchmove', onTouchMove, { passive: false });
-                document.body.addEventListener('touchend', onTouchEnd, { passive: false });
             }
 
             window.addEventListener('resize', onWindowResize);
@@ -795,11 +796,6 @@
             saveBtn.onclick = saveFunction;
             loadBtn.onclick = loadFunction;
             
-            if(isMobile) {
-                document.getElementById('mobile-save-world-btn').onclick = saveFunction;
-                document.getElementById('mobile-load-world-btn').onclick = loadFunction;
-            }
-
             loadFile.onchange = function(e) {
                 const file = e.target.files[0];
                 if (!file) return;
@@ -849,16 +845,13 @@
             };
 
             btn.onclick = openModal;
-            if (isMobile) {
-                document.getElementById('mobile-ai-builder-btn').onclick = openModal;
-            }
 
             span.onclick = () => modal.style.display = 'none';
-            window.onclick = (event) => {
+            window.addEventListener('click', (event) => {
                 if (event.target == modal) {
                     modal.style.display = 'none';
                 }
-            };
+            });
 
             generateBtn.onclick = async () => {
                 const userPrompt = promptInput.value;
@@ -973,7 +966,6 @@
             switch (event.code) {
                 case 'KeyW': moveForward = true; break;
                 case 'KeyS': moveBackward = true; break;
-                // NEW: Invert A/D keys based on setting
                 case 'KeyA': invertStrafe ? moveRight = true : moveLeft = true; break;
                 case 'KeyD': invertStrafe ? moveLeft = true : moveRight = true; break;
                 case 'KeyF': isFlying = !isFlying; velocity.y = 0; break;
@@ -997,7 +989,6 @@
             switch (event.code) {
                 case 'KeyW': moveForward = false; break;
                 case 'KeyS': moveBackward = false; break;
-                // NEW: Invert A/D keys based on setting
                 case 'KeyA': invertStrafe ? moveRight = false : moveLeft = false; break;
                 case 'KeyD': invertStrafe ? moveLeft = false : moveRight = false; break;
                 case 'Space': moveUp = false; break;
@@ -1098,78 +1089,78 @@
 
         function onTouchStart(event) {
             event.preventDefault();
-            for (const touch of event.changedTouches) {
-                const target = touch.target;
-                if (target.closest('#mobile-joystick-area')) {
-                    if (touchState.joystick.id === -1) {
-                        touchState.joystick.id = touch.identifier;
+            if (controls.isLocked) {
+                for (const touch of event.changedTouches) {
+                    const target = touch.target;
+                    if (target.closest('#mobile-joystick-area')) {
+                        if (touchState.joystick.id === -1) {
+                            touchState.joystick.id = touch.identifier;
+                        }
+                    } else if (target.id === 'mobile-jump-btn') {
+                        if (isFlying) moveUp = true;
+                        else if (canJump) { velocity.y += 6; canJump = false; }
+                    } else if (target.id === 'mobile-break-btn') {
+                        onMouseUp({ button: 0 });
+                    } else if (target.id === 'mobile-place-btn') {
+                        onMouseUp({ button: 2 });
+                    } else if (touchState.camera.id === -1) {
+                        touchState.camera.id = touch.identifier;
+                        touchState.camera.lastX = touch.clientX;
+                        touchState.camera.lastY = touch.clientY;
                     }
-                } else if (target.id === 'mobile-jump-btn') {
-                    if (isFlying) moveUp = true;
-                    else if (canJump) { velocity.y += 6; canJump = false; }
-                } else if (target.id === 'mobile-break-btn') {
-                    onMouseUp({ button: 0 });
-                } else if (target.id === 'mobile-place-btn') {
-                    onMouseUp({ button: 2 });
-                } else if (target.closest('#mobile-world-controls')) {
-                    // Handled by standard click events setup in init
-                }
-                else if (touchState.camera.id === -1) {
-                    touchState.camera.id = touch.identifier;
-                    touchState.camera.lastX = touch.clientX;
-                    touchState.camera.lastY = touch.clientY;
                 }
             }
         }
 
         function onTouchMove(event) {
             event.preventDefault();
-            for (const touch of event.changedTouches) {
-                if (touch.identifier === touchState.joystick.id) {
-                    const stick = document.getElementById('mobile-joystick');
-                    const areaRect = document.getElementById('mobile-joystick-area').getBoundingClientRect();
-                    const centerX = areaRect.left + areaRect.width / 2;
-                    const centerY = areaRect.top + areaRect.height / 2;
-                    let dx = touch.clientX - centerX;
-                    let dy = touch.clientY - centerY;
-                    const dist = Math.sqrt(dx*dx + dy*dy);
-                    const maxDist = areaRect.width / 2 - stick.offsetWidth / 2;
+            if (controls.isLocked) {
+                for (const touch of event.changedTouches) {
+                    if (touch.identifier === touchState.joystick.id) {
+                        const stick = document.getElementById('mobile-joystick');
+                        const areaRect = document.getElementById('mobile-joystick-area').getBoundingClientRect();
+                        const centerX = areaRect.left + areaRect.width / 2;
+                        const centerY = areaRect.top + areaRect.height / 2;
+                        let dx = touch.clientX - centerX;
+                        let dy = touch.clientY - centerY;
+                        const dist = Math.sqrt(dx*dx + dy*dy);
+                        const maxDist = areaRect.width / 2 - stick.offsetWidth / 2;
 
-                    if (dist > maxDist) {
-                        dx = (dx / dist) * maxDist;
-                        dy = (dy / dist) * maxDist;
+                        if (dist > maxDist) {
+                            dx = (dx / dist) * maxDist;
+                            dy = (dy / dist) * maxDist;
+                        }
+                        stick.style.transform = `translate(${dx}px, ${dy}px)`;
+
+                        const deadZone = 0.2;
+                        moveForward = (dy / maxDist) < -deadZone;
+                        moveBackward = (dy / maxDist) > deadZone;
+                        
+                        const joystickLeft = (dx / maxDist) < -deadZone;
+                        const joystickRight = (dx / maxDist) > deadZone;
+
+                        if (invertStrafe) {
+                            moveLeft = joystickRight;
+                            moveRight = joystickLeft;
+                        } else {
+                            moveLeft = joystickLeft;
+                            moveRight = joystickRight;
+                        }
+
+
+                    } else if (touch.identifier === touchState.camera.id) {
+                        const movementX = touch.clientX - touchState.camera.lastX;
+                        const movementY = touch.clientY - touchState.camera.lastY;
+
+                        _euler.setFromQuaternion( camera.quaternion );
+                        _euler.y -= movementX * 0.004 * controls.pointerSpeed;
+                        _euler.x -= movementY * 0.004 * controls.pointerSpeed * (controls.invertY ? -1 : 1);
+                        _euler.x = Math.max( _PI_2 - controls.maxPolarAngle, Math.min( _PI_2 - controls.minPolarAngle, _euler.x ) );
+                        camera.quaternion.setFromEuler( _euler );
+
+                        touchState.camera.lastX = touch.clientX;
+                        touchState.camera.lastY = touch.clientY;
                     }
-                    stick.style.transform = `translate(${dx}px, ${dy}px)`;
-
-                    const deadZone = 0.2;
-                    moveForward = (dy / maxDist) < -deadZone;
-                    moveBackward = (dy / maxDist) > deadZone;
-                    
-                    // NEW: Invert joystick strafe based on setting
-                    const joystickLeft = (dx / maxDist) < -deadZone;
-                    const joystickRight = (dx / maxDist) > deadZone;
-
-                    if (invertStrafe) {
-                        moveLeft = joystickRight;
-                        moveRight = joystickLeft;
-                    } else {
-                        moveLeft = joystickLeft;
-                        moveRight = joystickRight;
-                    }
-
-
-                } else if (touch.identifier === touchState.camera.id) {
-                    const movementX = touch.clientX - touchState.camera.lastX;
-                    const movementY = touch.clientY - touchState.camera.lastY;
-
-                    _euler.setFromQuaternion( camera.quaternion );
-                    _euler.y -= movementX * 0.004 * controls.pointerSpeed;
-                    _euler.x -= movementY * 0.004 * controls.pointerSpeed * (controls.invertY ? -1 : 1);
-                    _euler.x = Math.max( _PI_2 - controls.maxPolarAngle, Math.min( _PI_2 - controls.minPolarAngle, _euler.x ) );
-                    camera.quaternion.setFromEuler( _euler );
-
-                    touchState.camera.lastX = touch.clientX;
-                    touchState.camera.lastY = touch.clientY;
                 }
             }
         }
