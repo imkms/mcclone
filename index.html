@@ -52,8 +52,58 @@
             padding: 20px;
             border-radius: 5px;
             border: 2px solid #222;
+            width: 250px;
         }
-        #settings div { margin-bottom: 10px; text-align: left; font-size: 16px;}
+        #settings .setting-item { 
+            margin-bottom: 15px; 
+            text-align: left; 
+            font-size: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        /* Minecraft-style Switch */
+        .switch-container {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+        .switch-container input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #555;
+            border: 2px solid #222;
+            transition: .4s;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 2px;
+            bottom: 2px;
+            background-color: #c6c6c6;
+            border: 2px solid;
+            border-color: #c6c6c6 #555555 #555555 #c6c6c6;
+            transition: .4s;
+        }
+        input:checked + .slider {
+            background-color: #707070;
+        }
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+
         #inventory { position: absolute; left: 50%; bottom: 40px; transform: translateX(-50%); display: flex; gap: 10px; background: rgba(0,0,0,0.5); padding: 10px 20px; border-radius: 8px; z-index: 10; border: 2px solid #222;}
         .inv-slot { width: 40px; height: 40px; border: 2px solid #fff; border-radius: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer; background: rgba(255,255,255,0.1); transition: border 0.2s;}
         .inv-slot.selected { border: 2px solid #ff0; background: rgba(255,255,0,0.2);}
@@ -112,13 +162,21 @@
         .modal-content h2 {
             margin-top: 0;
         }
-        #ai-prompt {
+        #ai-prompt, #api-key-input {
             width: calc(100% - 22px);
             padding: 10px;
             margin-bottom: 15px;
             border-radius: 5px;
             border: 1px solid #ccc;
             font-size: 16px;
+        }
+        .api-key-container {
+            text-align: left;
+            margin-bottom: 20px;
+        }
+        .api-key-container label {
+            display: block;
+            margin-bottom: 5px;
         }
         #generate-btn {
             background-color: #4CAF50;
@@ -207,6 +265,29 @@
             font-weight: bold;
             text-shadow: 1px 1px #222;
         }
+        #mobile-world-controls {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 1001;
+            display: none;
+            gap: 10px;
+            pointer-events: auto;
+        }
+        #mobile-world-controls button {
+             width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: 2px solid white;
+            background: rgba(128, 128, 128, 0.5);
+            color: white;
+            font-size: 20px;
+            font-weight: bold;
+            text-shadow: 1px 1px #222;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
     </style>
 </head>
 <body>
@@ -226,13 +307,23 @@
                 1-9 or Mouse Wheel = Select Block
             </p>
             <div id="settings">
-                <div>
+                <div class="setting-item">
                     <label for="sensitivity">Sensitivity</label>
                     <input type="range" id="sensitivity" min="0.1" max="3" value="1" step="0.1">
                 </div>
-                <div>
-                    <input type="checkbox" id="invertY">
+                <div class="setting-item">
                     <label for="invertY">Invert Y-Axis</label>
+                    <label class="switch-container">
+                        <input type="checkbox" id="invertY">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                 <div class="setting-item">
+                    <label for="invertStrafe">Invert Strafe</label>
+                    <label class="switch-container">
+                        <input type="checkbox" id="invertStrafe">
+                        <span class="slider"></span>
+                    </label>
                 </div>
             </div>
         </div>
@@ -257,6 +348,11 @@
             <button id="mobile-break-btn">BREAK</button>
         </div>
     </div>
+    <div id="mobile-world-controls">
+        <button id="mobile-ai-builder-btn">✨</button>
+        <button id="mobile-save-world-btn">💾</button>
+        <button id="mobile-load-world-btn">📂</button>
+    </div>
 
     <!-- AI Builder Modal -->
     <div id="ai-builder-modal">
@@ -265,6 +361,10 @@
             <h2>✨ AI Structure Builder</h2>
             <p>Describe the structure you want to build.</p>
             <input type="text" id="ai-prompt" placeholder="e.g., a small castle with a tower">
+            <div class="api-key-container">
+                <label for="api-key-input">Gemini API Key:</label>
+                <input type="password" id="api-key-input" placeholder="Enter your API Key here">
+            </div>
             <button id="generate-btn">Generate</button>
             <div class="loader" id="ai-loader"></div>
         </div>
@@ -507,6 +607,7 @@
         let outlineMesh = null;
         let lastIntersected = null;
         let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false, canJump = false, isFlying = false, moveUp = false, moveDown = false;
+        let invertStrafe = false; // NEW: state for strafe inversion
         let prevTime = performance.now();
         const velocity = new THREE.Vector3();
         const direction = new THREE.Vector3();
@@ -529,11 +630,13 @@
         function saveSettings() {
             localStorage.setItem('mcclone_sensitivity', String(controls.pointerSpeed));
             localStorage.setItem('mcclone_invertY', controls.invertY ? '1' : '0');
+            localStorage.setItem('mcclone_invertStrafe', invertStrafe ? '1' : '0'); // NEW
         }
         function loadSettings() {
             return {
                 sensitivity: parseFloat(localStorage.getItem('mcclone_sensitivity')) || 1,
-                invertY: localStorage.getItem('mcclone_invertY') === '1'
+                invertY: localStorage.getItem('mcclone_invertY') === '1',
+                invertStrafe: localStorage.getItem('mcclone_invertStrafe') === '1' // NEW
             };
         }
 
@@ -554,14 +657,17 @@
             const playButton = document.getElementById('play-button');
             const sensitivitySlider = document.getElementById('sensitivity');
             const invertYCheckbox = document.getElementById('invertY');
+            const invertStrafeCheckbox = document.getElementById('invertStrafe'); // NEW
             const inventoryDiv = document.getElementById('inventory');
             fpsCounter = document.getElementById('fps-counter');
 
             const settings = loadSettings();
             controls.pointerSpeed = settings.sensitivity;
             controls.invertY = settings.invertY;
+            invertStrafe = settings.invertStrafe; // NEW
             sensitivitySlider.value = String(settings.sensitivity);
             invertYCheckbox.checked = settings.invertY;
+            invertStrafeCheckbox.checked = settings.invertStrafe; // NEW
 
             playButton.addEventListener('click', () => controls.lock());
             sensitivitySlider.addEventListener('input', (e) => {
@@ -572,6 +678,12 @@
                 controls.invertY = e.target.checked;
                 saveSettings();
             });
+            // NEW: Event listener for strafe switch
+            invertStrafeCheckbox.addEventListener('change', (e) => {
+                invertStrafe = e.target.checked;
+                saveSettings();
+            });
+
 
             controls.addEventListener('lock', () => {
                 instructions.style.display = 'none';
@@ -626,6 +738,8 @@
             // --- Mobile Init ---
             if (isMobile) {
                 document.getElementById('mobile-controls').style.display = 'flex';
+                document.getElementById('mobile-world-controls').style.display = 'flex';
+                document.getElementById('world-controls').style.display = 'none';
                 document.getElementById('blocker').style.display = 'none';
                 document.getElementById('crosshair').style.display = 'none';
                 controls.isLocked = true; // Pretend controls are locked
@@ -646,7 +760,11 @@
         }
 
         function setupWorldControls() {
-            document.getElementById('save-world-btn').onclick = function() {
+            const saveBtn = document.getElementById('save-world-btn');
+            const loadBtn = document.getElementById('load-world-btn');
+            const loadFile = document.getElementById('load-world-file');
+
+            const saveFunction = function() {
                 const blocksToSave = objects.filter(obj => !obj.isFloor).map(obj => {
                     const typeIndex = BLOCK_TYPES.findIndex(t => t.color === obj.children[0].material.color.getHex());
                     if (typeIndex === -1) return null;
@@ -670,11 +788,19 @@
                 }, 0);
             };
 
-            document.getElementById('load-world-btn').onclick = function() {
-                document.getElementById('load-world-file').click();
+            const loadFunction = function() {
+                loadFile.click();
             };
             
-            document.getElementById('load-world-file').onchange = function(e) {
+            saveBtn.onclick = saveFunction;
+            loadBtn.onclick = loadFunction;
+            
+            if(isMobile) {
+                document.getElementById('mobile-save-world-btn').onclick = saveFunction;
+                document.getElementById('mobile-load-world-btn').onclick = loadFunction;
+            }
+
+            loadFile.onchange = function(e) {
                 const file = e.target.files[0];
                 if (!file) return;
                 const reader = new FileReader();
@@ -709,11 +835,24 @@
             const generateBtn = document.getElementById('generate-btn');
             const loader = document.getElementById('ai-loader');
             const promptInput = document.getElementById('ai-prompt');
+            const apiKeyInput = document.getElementById('api-key-input');
 
-            btn.onclick = () => {
+            // Load saved API key
+            apiKeyInput.value = localStorage.getItem('mcclone_apiKey') || '';
+            apiKeyInput.addEventListener('input', () => {
+                localStorage.setItem('mcclone_apiKey', apiKeyInput.value);
+            });
+
+            const openModal = () => {
                 modal.style.display = 'flex';
                 if(controls.isLocked) controls.unlock();
             };
+
+            btn.onclick = openModal;
+            if (isMobile) {
+                document.getElementById('mobile-ai-builder-btn').onclick = openModal;
+            }
+
             span.onclick = () => modal.style.display = 'none';
             window.onclick = (event) => {
                 if (event.target == modal) {
@@ -723,6 +862,12 @@
 
             generateBtn.onclick = async () => {
                 const userPrompt = promptInput.value;
+                const apiKey = apiKeyInput.value;
+
+                if (!apiKey) {
+                    alert("Please enter your Gemini API Key.");
+                    return;
+                }
                 if (!userPrompt) {
                     alert("Please describe what you want to build.");
                     return;
@@ -766,7 +911,6 @@
                       },
                     };
                     
-                    const apiKey = ""; // Leave empty, handled by environment
                     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
                     
                     const response = await fetch(apiUrl, {
@@ -776,7 +920,8 @@
                     });
 
                     if (!response.ok) {
-                        throw new Error(`API request failed with status ${response.status}`);
+                        const errorBody = await response.text();
+                        throw new Error(`API request failed with status ${response.status}: ${errorBody}`);
                     }
 
                     const result = await response.json();
@@ -792,7 +937,7 @@
 
                 } catch (error) {
                     console.error("AI Builder Error:", error);
-                    alert("Sorry, something went wrong with the AI builder. " + error.message);
+                    alert("Sorry, something went wrong with the AI builder. Check the console for details. " + error.message);
                 } finally {
                     generateBtn.disabled = false;
                     loader.style.display = 'none';
@@ -827,9 +972,10 @@
             if (event.repeat) return;
             switch (event.code) {
                 case 'KeyW': moveForward = true; break;
-                case 'KeyA': moveRight = true; break;
                 case 'KeyS': moveBackward = true; break;
-                case 'KeyD': moveLeft = true; break;
+                // NEW: Invert A/D keys based on setting
+                case 'KeyA': invertStrafe ? moveRight = true : moveLeft = true; break;
+                case 'KeyD': invertStrafe ? moveLeft = true : moveRight = true; break;
                 case 'KeyF': isFlying = !isFlying; velocity.y = 0; break;
                 case 'Space':
                     if (isFlying) moveUp = true;
@@ -850,9 +996,10 @@
         function onKeyUp(event) {
             switch (event.code) {
                 case 'KeyW': moveForward = false; break;
-                case 'KeyA': moveRight = false; break;
                 case 'KeyS': moveBackward = false; break;
-                case 'KeyD': moveLeft = false; break;
+                // NEW: Invert A/D keys based on setting
+                case 'KeyA': invertStrafe ? moveRight = false : moveLeft = false; break;
+                case 'KeyD': invertStrafe ? moveLeft = false : moveRight = false; break;
                 case 'Space': moveUp = false; break;
                 case 'ShiftLeft': moveDown = false; break;
             }
@@ -964,7 +1111,10 @@
                     onMouseUp({ button: 0 });
                 } else if (target.id === 'mobile-place-btn') {
                     onMouseUp({ button: 2 });
-                } else if (touchState.camera.id === -1) {
+                } else if (target.closest('#mobile-world-controls')) {
+                    // Handled by standard click events setup in init
+                }
+                else if (touchState.camera.id === -1) {
                     touchState.camera.id = touch.identifier;
                     touchState.camera.lastX = touch.clientX;
                     touchState.camera.lastY = touch.clientY;
@@ -994,8 +1144,19 @@
                     const deadZone = 0.2;
                     moveForward = (dy / maxDist) < -deadZone;
                     moveBackward = (dy / maxDist) > deadZone;
-                    moveLeft = (dx / maxDist) < -deadZone;
-                    moveRight = (dx / maxDist) > deadZone;
+                    
+                    // NEW: Invert joystick strafe based on setting
+                    const joystickLeft = (dx / maxDist) < -deadZone;
+                    const joystickRight = (dx / maxDist) > deadZone;
+
+                    if (invertStrafe) {
+                        moveLeft = joystickRight;
+                        moveRight = joystickLeft;
+                    } else {
+                        moveLeft = joystickLeft;
+                        moveRight = joystickRight;
+                    }
+
 
                 } else if (touch.identifier === touchState.camera.id) {
                     const movementX = touch.clientX - touchState.camera.lastX;
