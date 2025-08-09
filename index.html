@@ -1,4 +1,264 @@
 <!DOCTYPE html>
+<!-- Mobile Controls UI -->
+<div id="mobile-controls">
+    <div id="mobile-joystick-area">
+        <div id="mobile-joystick"></div>
+    </div>
+    <div id="mobile-actions">
+        <button id="mobile-jump-btn">JUMP</button>
+        <button id="mobile-place-btn">PLACE</button>
+        <button id="mobile-break-btn">BREAK</button>
+    </div>
+</div>
+
+<!-- Mobile Controls CSS -->
+<style>
+    #mobile-controls {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 180px;
+        display: none; /* Hidden by default, enabled by JS */
+        justify-content: space-between;
+        align-items: center;
+        pointer-events: none;
+        z-index: 1000;
+        padding: 0 20px;
+        box-sizing: border-box;
+    }
+    #mobile-joystick-area {
+        position: relative;
+        width: 140px;
+        height: 140px;
+        border-radius: 50%;
+        background: rgba(128, 128, 128, 0.4);
+        pointer-events: auto;
+    }
+    #mobile-joystick {
+        position: absolute;
+        width: 70px;
+        height: 70px;
+        border-radius: 50%;
+        background: rgba(200, 200, 200, 0.6);
+        top: 35px;
+        left: 35px;
+        transition: transform 0.1s;
+    }
+    #mobile-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        pointer-events: auto;
+    }
+    #mobile-actions button {
+        width: 75px;
+        height: 75px;
+        border-radius: 50%;
+        border: 2px solid white;
+        background: rgba(128, 128, 128, 0.5);
+        color: white;
+        font-size: 14px;
+        font-weight: bold;
+        text-shadow: 1px 1px #222;
+    }
+</style>
+
+<!--
+    NOTE: The following JavaScript logic must be integrated into your existing <script type="module">.
+    It cannot run in a separate script tag due to module scope limitations.
+
+    1. Add the 'isMobile' constant near the top of your script.
+    2. Add the code from '--- Mobile Init ---' into your 'init()' function.
+    3. Add the new event handler functions and variables to your script.
+    4. Modify the 'animate' function to call the new camera handler.
+-->
+<script type="text/javascript">
+/*
+    // 1. Add this constant near the top of your <script type="module">
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    let touchState = {
+        joystick: { id: -1, x: 0, y: 0, dx: 0, dy: 0 },
+        camera: { id: -1, x: 0, y: 0, lastX: 0, lastY: 0 }
+    };
+
+    // 2. Add this block of code inside your init() function
+    if (isMobile) {
+        document.getElementById('mobile-controls').style.display = 'flex';
+        document.getElementById('blocker').style.display = 'none';
+        document.getElementById('crosshair').style.display = 'none'; // Mobile will use touch to aim
+        controls.isLocked = true; // Pretend controls are locked to enable movement logic
+
+        // Disable pointer lock functionality for mobile
+        controls.lock = () => {};
+        controls.unlock = () => {};
+        controls.connect = () => {}; // Prevent default mouse listeners
+        
+        // Add touch event listeners
+        document.body.addEventListener('touchstart', onTouchStart, { passive: false });
+        document.body.addEventListener('touchmove', onTouchMove, { passive: false });
+        document.body.addEventListener('touchend', onTouchEnd, { passive: false });
+    }
+
+    // 3. Add these new functions inside your <script type="module">
+    function onTouchStart(event) {
+        event.preventDefault();
+        const joystickArea = document.getElementById('mobile-joystick-area').getBoundingClientRect();
+
+        for (const touch of event.changedTouches) {
+            const target = touch.target;
+            if (target.closest('#mobile-joystick-area')) {
+                if (touchState.joystick.id === -1) { // First touch on joystick
+                    touchState.joystick.id = touch.identifier;
+                }
+            } else if (target.id === 'mobile-jump-btn') {
+                if (isFlying) moveUp = true;
+                else if (canJump) { velocity.y += 35; canJump = false; }
+            } else if (target.id === 'mobile-break-btn') {
+                onMouseUp({ button: 0, preventDefault: () => {} });
+            } else if (target.id === 'mobile-place-btn') {
+                onMouseUp({ button: 2, preventDefault: () => {} });
+            } else if (touchState.camera.id === -1) { // First touch for camera
+                touchState.camera.id = touch.identifier;
+                touchState.camera.lastX = touch.clientX;
+                touchState.camera.lastY = touch.clientY;
+            }
+        }
+    }
+
+    function onTouchMove(event) {
+        event.preventDefault();
+        for (const touch of event.changedTouches) {
+            if (touch.identifier === touchState.joystick.id) {
+                const stick = document.getElementById('mobile-joystick');
+                const areaRect = document.getElementById('mobile-joystick-area').getBoundingClientRect();
+                const centerX = areaRect.left + areaRect.width / 2;
+                const centerY = areaRect.top + areaRect.height / 2;
+                let dx = touch.clientX - centerX;
+                let dy = touch.clientY - centerY;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                const maxDist = areaRect.width / 2 - stick.offsetWidth / 2;
+
+                if (dist > maxDist) {
+                    dx = (dx / dist) * maxDist;
+                    dy = (dy / dist) * maxDist;
+                }
+                stick.style.transform = `translate(${dx}px, ${dy}px)`;
+
+                const deadZone = 0.2;
+                moveForward = (dy / maxDist) < -deadZone;
+                moveBackward = (dy / maxDist) > deadZone;
+                moveLeft = (dx / maxDist) < -deadZone;
+                moveRight = (dx / maxDist) > deadZone;
+
+            } else if (touch.identifier === touchState.camera.id) {
+                const movementX = touch.clientX - touchState.camera.lastX;
+                const movementY = touch.clientY - touchState.camera.lastY;
+
+                _euler.setFromQuaternion( camera.quaternion );
+                _euler.y -= movementX * 0.004 * controls.pointerSpeed;
+                _euler.x -= movementY * 0.004 * controls.pointerSpeed * (controls.invertY ? -1 : 1);
+                _euler.x = Math.max( _PI_2 - controls.maxPolarAngle, Math.min( _PI_2 - controls.minPolarAngle, _euler.x ) );
+                camera.quaternion.setFromEuler( _euler );
+
+                touchState.camera.lastX = touch.clientX;
+                touchState.camera.lastY = touch.clientY;
+            }
+        }
+    }
+
+    function onTouchEnd(event) {
+        event.preventDefault();
+        for (const touch of event.changedTouches) {
+            if (touch.identifier === touchState.joystick.id) {
+                touchState.joystick.id = -1;
+                moveForward = moveBackward = moveLeft = moveRight = false;
+                document.getElementById('mobile-joystick').style.transform = 'translate(0, 0)';
+            } else if (touch.identifier === touchState.camera.id) {
+                touchState.camera.id = -1;
+            }
+            if (touch.target.id === 'mobile-jump-btn') {
+                moveUp = false;
+            }
+        }
+    }
+
+    // 4. In the animate() function, replace updateOutline() with this:
+    if (isMobile) {
+        // On mobile, we don't show an outline as aiming is less precise
+        if (outlineMesh) {
+            scene.remove(outlineMesh);
+            outlineMesh = null;
+        }
+    } else {
+        updateOutline();
+    }
+*/
+</script>
+<div id="world-controls" style="position:absolute;top:10px;right:10px;z-index:200;">
+    <button id="save-world-btn" style="font-size:16px;padding:4px 12px;margin-right:6px;">Save World</button>
+    <button id="load-world-btn" style="font-size:16px;padding:4px 12px;">Load World</button>
+    <input type="file" id="load-world-file" accept=".json" style="display:none;">
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // Save World
+    document.getElementById('save-world-btn').onclick = function() {
+        // Only save non-floor blocks
+        const blocks = objects.filter(obj => !obj.isFloor).map(obj => ({
+            type: BLOCK_TYPES.findIndex(t => t.color === obj.children[0].material.color.getHex()),
+            pos: { x: obj.position.x, y: obj.position.y, z: obj.position.z }
+        }));
+        const data = JSON.stringify(blocks);
+        const blob = new Blob([data], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'minecraft_clone_world.json';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }, 0);
+    };
+
+    // Load World
+    document.getElementById('load-world-btn').onclick = function() {
+        document.getElementById('load-world-file').click();
+    };
+    document.getElementById('load-world-file').onchange = function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(ev) {
+            try {
+                const blocks = JSON.parse(ev.target.result);
+                // Remove all non-floor blocks
+                for (let i = objects.length - 1; i >= 0; i--) {
+                    if (!objects[i].isFloor) {
+                        scene.remove(objects[i]);
+                        objects.splice(i, 1);
+                    }
+                }
+                // Add loaded blocks
+                for (const b of blocks) {
+                    if (typeof b.type !== 'number' || !b.pos) continue;
+                    const block = createBlock(b.type);
+                    block.position.set(b.pos.x, b.pos.y, b.pos.z);
+                    scene.add(block);
+                    objects.push(block);
+                }
+            } catch (err) {
+                alert('Failed to load world: ' + err);
+            }
+        };
+        reader.readAsText(file);
+        // Reset file input so same file can be loaded again
+        e.target.value = '';
+    };
+});
+</script>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
