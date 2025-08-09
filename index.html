@@ -1,268 +1,9 @@
 <!DOCTYPE html>
-<!-- Mobile Controls UI -->
-<div id="mobile-controls">
-    <div id="mobile-joystick-area">
-        <div id="mobile-joystick"></div>
-    </div>
-    <div id="mobile-actions">
-        <button id="mobile-jump-btn">JUMP</button>
-        <button id="mobile-place-btn">PLACE</button>
-        <button id="mobile-break-btn">BREAK</button>
-    </div>
-</div>
-
-<!-- Mobile Controls CSS -->
-<style>
-    #mobile-controls {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        width: 100%;
-        height: 180px;
-        display: none; /* Hidden by default, enabled by JS */
-        justify-content: space-between;
-        align-items: center;
-        pointer-events: none;
-        z-index: 1000;
-        padding: 0 20px;
-        box-sizing: border-box;
-    }
-    #mobile-joystick-area {
-        position: relative;
-        width: 140px;
-        height: 140px;
-        border-radius: 50%;
-        background: rgba(128, 128, 128, 0.4);
-        pointer-events: auto;
-    }
-    #mobile-joystick {
-        position: absolute;
-        width: 70px;
-        height: 70px;
-        border-radius: 50%;
-        background: rgba(200, 200, 200, 0.6);
-        top: 35px;
-        left: 35px;
-        transition: transform 0.1s;
-    }
-    #mobile-actions {
-        display: flex;
-        flex-direction: column;
-        gap: 15px;
-        pointer-events: auto;
-    }
-    #mobile-actions button {
-        width: 75px;
-        height: 75px;
-        border-radius: 50%;
-        border: 2px solid white;
-        background: rgba(128, 128, 128, 0.5);
-        color: white;
-        font-size: 14px;
-        font-weight: bold;
-        text-shadow: 1px 1px #222;
-    }
-</style>
-
-<!--
-    NOTE: The following JavaScript logic must be integrated into your existing <script type="module">.
-    It cannot run in a separate script tag due to module scope limitations.
-
-    1. Add the 'isMobile' constant near the top of your script.
-    2. Add the code from '--- Mobile Init ---' into your 'init()' function.
-    3. Add the new event handler functions and variables to your script.
-    4. Modify the 'animate' function to call the new camera handler.
--->
-<script type="text/javascript">
-/*
-    // 1. Add this constant near the top of your <script type="module">
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    let touchState = {
-        joystick: { id: -1, x: 0, y: 0, dx: 0, dy: 0 },
-        camera: { id: -1, x: 0, y: 0, lastX: 0, lastY: 0 }
-    };
-
-    // 2. Add this block of code inside your init() function
-    if (isMobile) {
-        document.getElementById('mobile-controls').style.display = 'flex';
-        document.getElementById('blocker').style.display = 'none';
-        document.getElementById('crosshair').style.display = 'none'; // Mobile will use touch to aim
-        controls.isLocked = true; // Pretend controls are locked to enable movement logic
-
-        // Disable pointer lock functionality for mobile
-        controls.lock = () => {};
-        controls.unlock = () => {};
-        controls.connect = () => {}; // Prevent default mouse listeners
-        
-        // Add touch event listeners
-        document.body.addEventListener('touchstart', onTouchStart, { passive: false });
-        document.body.addEventListener('touchmove', onTouchMove, { passive: false });
-        document.body.addEventListener('touchend', onTouchEnd, { passive: false });
-    }
-
-    // 3. Add these new functions inside your <script type="module">
-    function onTouchStart(event) {
-        event.preventDefault();
-        const joystickArea = document.getElementById('mobile-joystick-area').getBoundingClientRect();
-
-        for (const touch of event.changedTouches) {
-            const target = touch.target;
-            if (target.closest('#mobile-joystick-area')) {
-                if (touchState.joystick.id === -1) { // First touch on joystick
-                    touchState.joystick.id = touch.identifier;
-                }
-            } else if (target.id === 'mobile-jump-btn') {
-                if (isFlying) moveUp = true;
-                else if (canJump) { velocity.y += 35; canJump = false; }
-            } else if (target.id === 'mobile-break-btn') {
-                onMouseUp({ button: 0, preventDefault: () => {} });
-            } else if (target.id === 'mobile-place-btn') {
-                onMouseUp({ button: 2, preventDefault: () => {} });
-            } else if (touchState.camera.id === -1) { // First touch for camera
-                touchState.camera.id = touch.identifier;
-                touchState.camera.lastX = touch.clientX;
-                touchState.camera.lastY = touch.clientY;
-            }
-        }
-    }
-
-    function onTouchMove(event) {
-        event.preventDefault();
-        for (const touch of event.changedTouches) {
-            if (touch.identifier === touchState.joystick.id) {
-                const stick = document.getElementById('mobile-joystick');
-                const areaRect = document.getElementById('mobile-joystick-area').getBoundingClientRect();
-                const centerX = areaRect.left + areaRect.width / 2;
-                const centerY = areaRect.top + areaRect.height / 2;
-                let dx = touch.clientX - centerX;
-                let dy = touch.clientY - centerY;
-                const dist = Math.sqrt(dx*dx + dy*dy);
-                const maxDist = areaRect.width / 2 - stick.offsetWidth / 2;
-
-                if (dist > maxDist) {
-                    dx = (dx / dist) * maxDist;
-                    dy = (dy / dist) * maxDist;
-                }
-                stick.style.transform = `translate(${dx}px, ${dy}px)`;
-
-                const deadZone = 0.2;
-                moveForward = (dy / maxDist) < -deadZone;
-                moveBackward = (dy / maxDist) > deadZone;
-                moveLeft = (dx / maxDist) < -deadZone;
-                moveRight = (dx / maxDist) > deadZone;
-
-            } else if (touch.identifier === touchState.camera.id) {
-                const movementX = touch.clientX - touchState.camera.lastX;
-                const movementY = touch.clientY - touchState.camera.lastY;
-
-                _euler.setFromQuaternion( camera.quaternion );
-                _euler.y -= movementX * 0.004 * controls.pointerSpeed;
-                _euler.x -= movementY * 0.004 * controls.pointerSpeed * (controls.invertY ? -1 : 1);
-                _euler.x = Math.max( _PI_2 - controls.maxPolarAngle, Math.min( _PI_2 - controls.minPolarAngle, _euler.x ) );
-                camera.quaternion.setFromEuler( _euler );
-
-                touchState.camera.lastX = touch.clientX;
-                touchState.camera.lastY = touch.clientY;
-            }
-        }
-    }
-
-    function onTouchEnd(event) {
-        event.preventDefault();
-        for (const touch of event.changedTouches) {
-            if (touch.identifier === touchState.joystick.id) {
-                touchState.joystick.id = -1;
-                moveForward = moveBackward = moveLeft = moveRight = false;
-                document.getElementById('mobile-joystick').style.transform = 'translate(0, 0)';
-            } else if (touch.identifier === touchState.camera.id) {
-                touchState.camera.id = -1;
-            }
-            if (touch.target.id === 'mobile-jump-btn') {
-                moveUp = false;
-            }
-        }
-    }
-
-    // 4. In the animate() function, replace updateOutline() with this:
-    if (isMobile) {
-        // On mobile, we don't show an outline as aiming is less precise
-        if (outlineMesh) {
-            scene.remove(outlineMesh);
-            outlineMesh = null;
-        }
-    } else {
-        updateOutline();
-    }
-*/
-</script>
-<div id="world-controls" style="position:absolute;top:10px;right:10px;z-index:200;">
-    <button id="save-world-btn" style="font-size:16px;padding:4px 12px;margin-right:6px;">Save World</button>
-    <button id="load-world-btn" style="font-size:16px;padding:4px 12px;">Load World</button>
-    <input type="file" id="load-world-file" accept=".json" style="display:none;">
-</div>
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-    // Save World
-    document.getElementById('save-world-btn').onclick = function() {
-        // Only save non-floor blocks
-        const blocks = objects.filter(obj => !obj.isFloor).map(obj => ({
-            type: BLOCK_TYPES.findIndex(t => t.color === obj.children[0].material.color.getHex()),
-            pos: { x: obj.position.x, y: obj.position.y, z: obj.position.z }
-        }));
-        const data = JSON.stringify(blocks);
-        const blob = new Blob([data], {type: 'application/json'});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'minecraft_clone_world.json';
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(() => {
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        }, 0);
-    };
-
-    // Load World
-    document.getElementById('load-world-btn').onclick = function() {
-        document.getElementById('load-world-file').click();
-    };
-    document.getElementById('load-world-file').onchange = function(e) {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = function(ev) {
-            try {
-                const blocks = JSON.parse(ev.target.result);
-                // Remove all non-floor blocks
-                for (let i = objects.length - 1; i >= 0; i--) {
-                    if (!objects[i].isFloor) {
-                        scene.remove(objects[i]);
-                        objects.splice(i, 1);
-                    }
-                }
-                // Add loaded blocks
-                for (const b of blocks) {
-                    if (typeof b.type !== 'number' || !b.pos) continue;
-                    const block = createBlock(b.type);
-                    block.position.set(b.pos.x, b.pos.y, b.pos.z);
-                    scene.add(block);
-                    objects.push(block);
-                }
-            } catch (err) {
-                alert('Failed to load world: ' + err);
-            }
-        };
-        reader.readAsText(file);
-        // Reset file input so same file can be loaded again
-        e.target.value = '';
-    };
-});
-</script>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Minecraft Clone</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Minecraft Clone with AI Builder</title>
     <style>
         body { margin: 0; overflow: hidden; font-family: monospace; }
         #blocker {
@@ -327,11 +68,150 @@ document.addEventListener('DOMContentLoaded', () => {
             z-index: 100;
             pointer-events: none;
         }
-        </style>
-    </head>
-    <body>
-        <div id="fps-counter"></div>
-        <div id="blocker">
+        #world-controls {
+            position:absolute;
+            top:10px;
+            right:10px;
+            z-index:200;
+        }
+        #world-controls button {
+            font-size:16px;
+            padding:8px 12px;
+            margin-right:6px;
+            font-family: monospace;
+            cursor: pointer;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+        /* Gemini AI Builder Modal Styles */
+        #ai-builder-modal {
+            display: none;
+            position: fixed;
+            z-index: 1001;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.6);
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 500px;
+            border-radius: 10px;
+            font-family: monospace;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            text-align: center;
+        }
+        .modal-content h2 {
+            margin-top: 0;
+        }
+        #ai-prompt {
+            width: calc(100% - 22px);
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            font-size: 16px;
+        }
+        #generate-btn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        #generate-btn:hover {
+            background-color: #45a049;
+        }
+        #generate-btn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .close-btn {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 4px solid #3498db;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            display: none;
+            margin: 10px auto 0;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* Mobile Controls */
+        #mobile-controls {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 180px;
+            display: none; /* Hidden by default, enabled by JS */
+            justify-content: space-between;
+            align-items: center;
+            pointer-events: none;
+            z-index: 1000;
+            padding: 0 20px;
+            box-sizing: border-box;
+        }
+        #mobile-joystick-area {
+            position: relative;
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: rgba(128, 128, 128, 0.4);
+            pointer-events: auto;
+        }
+        #mobile-joystick {
+            position: absolute;
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            background: rgba(200, 200, 200, 0.6);
+            top: 35px;
+            left: 35px;
+            transition: transform 0.1s;
+        }
+        #mobile-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            pointer-events: auto;
+        }
+        #mobile-actions button {
+            width: 75px;
+            height: 75px;
+            border-radius: 50%;
+            border: 2px solid white;
+            background: rgba(128, 128, 128, 0.5);
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+            text-shadow: 1px 1px #222;
+        }
+    </style>
+</head>
+<body>
+    <div id="fps-counter"></div>
+    <div id="blocker">
         <div id="instructions">
             <div id="title">Minecraft Clone</div>
             <div id="play-button">Click to play</div>
@@ -359,11 +239,42 @@ document.addEventListener('DOMContentLoaded', () => {
     </div>
     <div id="crosshair"></div>
     <div id="inventory"></div>
+    <div id="world-controls">
+        <button id="ai-builder-btn">✨ AI Builder</button>
+        <button id="save-world-btn">Save World</button>
+        <button id="load-world-btn">Load World</button>
+        <input type="file" id="load-world-file" accept=".json" style="display:none;">
+    </div>
+
+    <!-- Mobile Controls UI -->
+    <div id="mobile-controls">
+        <div id="mobile-joystick-area">
+            <div id="mobile-joystick"></div>
+        </div>
+        <div id="mobile-actions">
+            <button id="mobile-jump-btn">JUMP</button>
+            <button id="mobile-place-btn">PLACE</button>
+            <button id="mobile-break-btn">BREAK</button>
+        </div>
+    </div>
+
+    <!-- AI Builder Modal -->
+    <div id="ai-builder-modal">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h2>✨ AI Structure Builder</h2>
+            <p>Describe the structure you want to build.</p>
+            <input type="text" id="ai-prompt" placeholder="e.g., a small castle with a tower">
+            <button id="generate-btn">Generate</button>
+            <div class="loader" id="ai-loader"></div>
+        </div>
+    </div>
+
 
     <script type="importmap">
         {
             "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
             }
         }
     </script>
@@ -397,9 +308,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
                     _euler.setFromQuaternion( camera.quaternion );
                     _euler.y -= movementX * 0.002 * scope.pointerSpeed;
-                    // --- MODIFICATION HERE ---
                     _euler.x -= movementY * 0.002 * scope.pointerSpeed * (scope.invertY ? -1 : 1);
-                    // --- END MODIFICATION ---
                     _euler.x = Math.max( _PI_2 - scope.maxPolarAngle, Math.min( _PI_2 - scope.minPolarAngle, _euler.x ) );
                     camera.quaternion.setFromEuler( _euler );
                     scope.dispatchEvent( _changeEvent );
@@ -439,12 +348,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     return camera;
                 };
 
-                this.getDirection = function () {
+                this.getDirection = (function () {
                     const direction = new THREE.Vector3( 0, 0, - 1 );
                     return function ( v ) {
                         return v.copy( direction ).applyQuaternion( camera.quaternion );
                     };
-                }();
+                })();
 
                 this.moveForward = function ( distance ) {
                     _vector.setFromMatrixColumn( camera.matrix, 0 );
@@ -470,13 +379,23 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         // --- END OF POINTER LOCK CONTROLS ---
 
+        // --- Mobile Detection ---
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        let touchState = {
+            joystick: { id: -1, x: 0, y: 0, dx: 0, dy: 0 },
+            camera: { id: -1, x: 0, y: 0, lastX: 0, lastY: 0 }
+        };
+
         // --- Block Types ---
         const BLOCK_TYPES = [
             { name: 'Grass', color: 0x559020 },
             { name: 'Stone', color: 0x808080 },
-            { name: 'Dirt',  color: 0x9b7653 },
+            { name: 'Wood',  color: 0x8b5a2b },
             { name: 'Sand',  color: 0xf0e68c },
-            { name: 'Wood',  color: 0x8b5a2b }
+            { name: 'Red Brick', color: 0xB22222 },
+            { name: 'Lapis Block', color: 0x4169E1 },
+            { name: 'Quartz', color: 0xf5f5f5 },
+            { name: 'Obsidian', color: 0x1c1c1c }
         ];
         let selectedBlockIndex = 0;
 
@@ -485,7 +404,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const outlineMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00, side: THREE.BackSide });
 
         // --- Block Creation Helper ---
-        function createBlock(typeIndex) {
+        function createBlock(typeIndex, position) {
+            if (typeIndex < 0 || typeIndex >= BLOCK_TYPES.length) {
+                console.error("Invalid block type index:", typeIndex);
+                return null;
+            }
             const blockData = BLOCK_TYPES[typeIndex];
             const group = new THREE.Group();
             const geometry = new THREE.BoxGeometry(1, 1, 1);
@@ -496,6 +419,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const line = new THREE.LineSegments(edges, lineMaterial);
             line.raycast = () => {}; // Disable raycasting for the block edges
             group.add(line);
+            group.position.copy(position);
             return group;
         }
 
@@ -519,50 +443,57 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- Collision Helpers ---
         function playerAABB() {
             const pos = controls.getObject().position;
-            return {
-                min: new THREE.Vector3(pos.x - 0.3, pos.y - 1.2, pos.z - 0.3),
-                max: new THREE.Vector3(pos.x + 0.3, pos.y + 0.3, pos.z + 0.3)
-            };
+            return new THREE.Box3(
+                new THREE.Vector3(pos.x - 0.3, pos.y - 1.2, pos.z - 0.3),
+                new THREE.Vector3(pos.x + 0.3, pos.y + 0.3, pos.z + 0.3)
+            );
         }
 
         function boxAABB(meshGroup) {
             const pos = meshGroup.position;
-            return {
-                min: new THREE.Vector3(pos.x - 0.5, pos.y - 0.5, pos.z - 0.5),
-                max: new THREE.Vector3(pos.x + 0.5, pos.y + 0.5, pos.z + 0.5)
-            };
-        }
-
-        function aabbIntersect(a, b) {
-            return (
-                a.min.x <= b.max.x && a.max.x >= b.min.x &&
-                a.min.y <= b.max.y && a.max.y >= b.min.y &&
-                a.min.z <= b.max.z && a.max.z >= b.min.z
+            return new THREE.Box3(
+                new THREE.Vector3(pos.x - 0.5, pos.y - 0.5, pos.z - 0.5),
+                new THREE.Vector3(pos.x + 0.5, pos.y + 0.5, pos.z + 0.5)
             );
         }
 
+        function aabbIntersect(a, b) {
+            return a.intersectsBox(b);
+        }
+
         function resolveCollisions() {
-            const player = playerAABB();
+            const playerBox = playerAABB();
             const pos = controls.getObject().position;
             for (let obj of objects) {
                 if (obj.isFloor) continue;
-                const box = boxAABB(obj);
-                if (aabbIntersect(player, box)) {
-                    const dx1 = box.max.x - player.min.x, dx2 = player.max.x - box.min.x;
-                    const dy1 = box.max.y - player.min.y, dy2 = player.max.y - box.min.y;
-                    const dz1 = box.max.z - player.min.z, dz2 = player.max.z - box.min.z;
-                    const minX = dx1 < dx2 ? dx1 : -dx2;
-                    const minY = dy1 < dy2 ? dy1 : -dy2;
-                    const minZ = dz1 < dz2 ? dz1 : -dz2;
-                    const absX = Math.abs(minX), absY = Math.abs(minY), absZ = Math.abs(minZ);
-                    if (absX < absY && absX < absZ) {
-                        pos.x += minX;
+                const blockBox = boxAABB(obj);
+                if (aabbIntersect(playerBox, blockBox)) {
+                    const intersection = new THREE.Vector3();
+                    playerBox.intersect(blockBox, intersection);
+
+                    const overlap = new THREE.Vector3();
+                    playerBox.getCenter(overlap).sub(blockBox.getCenter(new THREE.Vector3()));
+
+                    const sizes = new THREE.Vector3();
+                    playerBox.getSize(sizes);
+                    const blockSizes = new THREE.Vector3();
+                    blockBox.getSize(blockSizes);
+                    
+                    const penetration = new THREE.Vector3(
+                        (sizes.x + blockSizes.x) / 2 - Math.abs(overlap.x),
+                        (sizes.y + blockSizes.y) / 2 - Math.abs(overlap.y),
+                        (sizes.z + blockSizes.z) / 2 - Math.abs(overlap.z)
+                    );
+
+                    if (penetration.x < penetration.y && penetration.x < penetration.z) {
+                        pos.x += penetration.x * Math.sign(overlap.x);
                         velocity.x = 0;
-                    } else if (absY < absX && absY < absZ) {
-                        pos.y += minY;
+                    } else if (penetration.y < penetration.x && penetration.y < penetration.z) {
+                        pos.y += penetration.y * Math.sign(overlap.y);
                         velocity.y = 0;
+                        canJump = true;
                     } else {
-                        pos.z += minZ;
+                        pos.z += penetration.z * Math.sign(overlap.z);
                         velocity.z = 0;
                     }
                 }
@@ -626,7 +557,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const inventoryDiv = document.getElementById('inventory');
             fpsCounter = document.getElementById('fps-counter');
 
-            // --- Load settings from localStorage ---
             const settings = loadSettings();
             controls.pointerSpeed = settings.sensitivity;
             controls.invertY = settings.invertY;
@@ -648,16 +578,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 blocker.style.display = 'none';
             });
             controls.addEventListener('unlock', () => {
-                blocker.style.display = 'block';
-                instructions.style.display = '';
+                if (!isMobile) {
+                    blocker.style.display = 'block';
+                    instructions.style.display = '';
+                }
             });
             scene.add(controls.getObject());
 
+            // --- World Save/Load ---
+            setupWorldControls();
+
+            // --- AI Builder ---
+            setupAIBuilder();
+
+            // --- Event Listeners ---
             document.addEventListener('keydown', onKeyDown);
             document.addEventListener('keyup', onKeyUp);
             document.addEventListener('wheel', onMouseWheel, { passive: false });
             inventoryDiv.addEventListener('click', onInventoryClick);
-            document.addEventListener('mouseup', onMouseUp); // Changed from mousedown
+            document.addEventListener('mouseup', onMouseUp);
             document.addEventListener('contextmenu', e => e.preventDefault());
 
             raycaster = new THREE.Raycaster(new THREE.Vector3(), new THREE.Vector3(0, -1, 0), 0, 10);
@@ -677,29 +616,224 @@ document.addEventListener('DOMContentLoaded', () => {
             // --- Generate a flat world ---
             for (let x = worldMinX; x <= worldMaxX; x++) {
                 for (let z = worldMinZ; z <= worldMaxZ; z++) {
-                    const grass = createBlock(0); // Grass block
-                    grass.position.set(x, 0.5, z);
+                    const grass = createBlock(0, new THREE.Vector3(x, 0.5, z));
                     grass.isFloor = true;
                     scene.add(grass);
                     objects.push(grass);
                 }
             }
 
+            // --- Mobile Init ---
+            if (isMobile) {
+                document.getElementById('mobile-controls').style.display = 'flex';
+                document.getElementById('blocker').style.display = 'none';
+                document.getElementById('crosshair').style.display = 'none';
+                controls.isLocked = true; // Pretend controls are locked
+
+                // Disable pointer lock functionality for mobile
+                controls.lock = () => {};
+                controls.unlock = () => {};
+                controls.connect = () => {}; // Prevent default mouse listeners
+                
+                // Add touch event listeners
+                document.body.addEventListener('touchstart', onTouchStart, { passive: false });
+                document.body.addEventListener('touchmove', onTouchMove, { passive: false });
+                document.body.addEventListener('touchend', onTouchEnd, { passive: false });
+            }
+
             window.addEventListener('resize', onWindowResize);
             buildInventoryUI();
+        }
+
+        function setupWorldControls() {
+            document.getElementById('save-world-btn').onclick = function() {
+                const blocksToSave = objects.filter(obj => !obj.isFloor).map(obj => {
+                    const typeIndex = BLOCK_TYPES.findIndex(t => t.color === obj.children[0].material.color.getHex());
+                    if (typeIndex === -1) return null;
+                    return {
+                        type: typeIndex,
+                        pos: { x: obj.position.x, y: obj.position.y, z: obj.position.z }
+                    };
+                }).filter(b => b !== null);
+
+                const data = JSON.stringify(blocksToSave);
+                const blob = new Blob([data], {type: 'application/json'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'mcclone_world.json';
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 0);
+            };
+
+            document.getElementById('load-world-btn').onclick = function() {
+                document.getElementById('load-world-file').click();
+            };
+            
+            document.getElementById('load-world-file').onchange = function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = function(ev) {
+                    try {
+                        const loadedBlocks = JSON.parse(ev.target.result);
+                        for (let i = objects.length - 1; i >= 0; i--) {
+                            if (!objects[i].isFloor) {
+                                scene.remove(objects[i]);
+                                objects.splice(i, 1);
+                            }
+                        }
+                        for (const b of loadedBlocks) {
+                            if (typeof b.type !== 'number' || !b.pos || b.type < 0 || b.type >= BLOCK_TYPES.length) continue;
+                            const block = createBlock(b.type, new THREE.Vector3(b.pos.x, b.pos.y, b.pos.z));
+                            scene.add(block);
+                            objects.push(block);
+                        }
+                    } catch (err) {
+                        console.error('Failed to load world:', err);
+                    }
+                };
+                reader.readAsText(file);
+                e.target.value = '';
+            };
+        }
+
+        function setupAIBuilder() {
+            const modal = document.getElementById('ai-builder-modal');
+            const btn = document.getElementById('ai-builder-btn');
+            const span = document.getElementsByClassName('close-btn')[0];
+            const generateBtn = document.getElementById('generate-btn');
+            const loader = document.getElementById('ai-loader');
+            const promptInput = document.getElementById('ai-prompt');
+
+            btn.onclick = () => {
+                modal.style.display = 'flex';
+                if(controls.isLocked) controls.unlock();
+            };
+            span.onclick = () => modal.style.display = 'none';
+            window.onclick = (event) => {
+                if (event.target == modal) {
+                    modal.style.display = 'none';
+                }
+            };
+
+            generateBtn.onclick = async () => {
+                const userPrompt = promptInput.value;
+                if (!userPrompt) {
+                    alert("Please describe what you want to build.");
+                    return;
+                }
+
+                generateBtn.disabled = true;
+                loader.style.display = 'block';
+
+                try {
+                    const blockList = BLOCK_TYPES.map((b, i) => `${i}: ${b.name}`).join(', ');
+                    const fullPrompt = `You are a Minecraft building expert. The user wants to build: "${userPrompt}". 
+                    Generate a JSON object for a structure. The origin (0,0,0) will be 5 blocks in front of the player.
+                    Available block types are: ${blockList}.
+                    The ground is at y=0. Do not build below y=0. Keep the structure reasonably small (e.g., within a 15x15x15 area).
+                    The JSON output should be a single object with a key "blocks", which is an array of objects.
+                    Each object in the array must have integer properties "x", "y", "z" for position, and "type" for the block type index.`;
+
+                    const payload = {
+                      contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
+                      generationConfig: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                          type: "OBJECT",
+                          properties: {
+                            "blocks": {
+                              type: "ARRAY",
+                              items: {
+                                type: "OBJECT",
+                                properties: {
+                                  x: { type: "INTEGER" },
+                                  y: { type: "INTEGER" },
+                                  z: { type: "INTEGER" },
+                                  type: { type: "INTEGER" },
+                                },
+                                required: ["x", "y", "z", "type"],
+                              },
+                            },
+                          },
+                          required: ["blocks"],
+                        },
+                      },
+                    };
+                    
+                    const apiKey = ""; // Leave empty, handled by environment
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+                    
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`API request failed with status ${response.status}`);
+                    }
+
+                    const result = await response.json();
+                    
+                    if (result.candidates && result.candidates.length > 0) {
+                        const jsonText = result.candidates[0].content.parts[0].text;
+                        const generated = JSON.parse(jsonText);
+                        buildStructure(generated.blocks);
+                        modal.style.display = 'none';
+                    } else {
+                        throw new Error("Invalid response from AI. Please try again.");
+                    }
+
+                } catch (error) {
+                    console.error("AI Builder Error:", error);
+                    alert("Sorry, something went wrong with the AI builder. " + error.message);
+                } finally {
+                    generateBtn.disabled = false;
+                    loader.style.display = 'none';
+                }
+            };
+        }
+
+        function buildStructure(generatedBlocks) {
+            const playerPos = controls.getObject().position;
+            const playerDir = new THREE.Vector3();
+            controls.getDirection(playerDir);
+            playerDir.y = 0;
+            playerDir.normalize();
+
+            const buildOrigin = new THREE.Vector3()
+                .copy(playerPos)
+                .add(playerDir.multiplyScalar(5)) // Place it 5 blocks in front
+                .floor(); // Align to grid
+            buildOrigin.y = 1; // Start build on top of ground plane
+
+            for (const b of generatedBlocks) {
+                const pos = new THREE.Vector3(b.x, b.y, b.z).add(buildOrigin);
+                const block = createBlock(b.type, pos);
+                if (block) {
+                    scene.add(block);
+                    objects.push(block);
+                }
+            }
         }
 
         function onKeyDown(event) {
             if (event.repeat) return;
             switch (event.code) {
                 case 'KeyW': moveForward = true; break;
-                case 'KeyA': moveLeft = true; break;
+                case 'KeyA': moveRight = true; break;
                 case 'KeyS': moveBackward = true; break;
-                case 'KeyD': moveRight = true; break;
+                case 'KeyD': moveLeft = true; break;
                 case 'KeyF': isFlying = !isFlying; velocity.y = 0; break;
                 case 'Space':
                     if (isFlying) moveUp = true;
-                    else if (canJump) { velocity.y += 35; canJump = false; }
+                    else if (canJump) { velocity.y += 6; canJump = false; }
                     break;
                 case 'ShiftLeft': if(isFlying) moveDown = true; break;
                 case 'Digit1': selectHotbar(0); break;
@@ -707,15 +841,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 case 'Digit3': selectHotbar(2); break;
                 case 'Digit4': selectHotbar(3); break;
                 case 'Digit5': selectHotbar(4); break;
+                case 'Digit6': selectHotbar(5); break;
+                case 'Digit7': selectHotbar(6); break;
+                case 'Digit8': selectHotbar(7); break;
             }
         }
 
         function onKeyUp(event) {
             switch (event.code) {
                 case 'KeyW': moveForward = false; break;
-                case 'KeyA': moveLeft = false; break;
+                case 'KeyA': moveRight = false; break;
                 case 'KeyS': moveBackward = false; break;
-                case 'KeyD': moveRight = false; break;
+                case 'KeyD': moveLeft = false; break;
                 case 'Space': moveUp = false; break;
                 case 'ShiftLeft': moveDown = false; break;
             }
@@ -745,7 +882,7 @@ document.addEventListener('DOMContentLoaded', () => {
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
-        function onMouseUp(event) { // Renamed from onMouseDown
+        function onMouseUp(event) {
             if (!controls.isLocked) return;
 
             raycaster.setFromCamera({ x: 0, y: 0 }, camera);
@@ -757,9 +894,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const intersectedGroup = intersect.object.parent;
 
                 if (event.button === 2) { // Right click to place
-                    const newBlock = createBlock(selectedBlockIndex);
-                    newBlock.position.copy(intersectedGroup.position).add(intersect.face.normal);
-                    // Prevent placing inside player and outside world bounds
+                    const newPos = new THREE.Vector3().copy(intersectedGroup.position).add(intersect.face.normal);
+                    const newBlock = createBlock(selectedBlockIndex, newPos);
+                    
                     if (
                         !aabbIntersect(playerAABB(), boxAABB(newBlock)) &&
                         newBlock.position.x >= worldMinX && newBlock.position.x <= worldMaxX &&
@@ -779,7 +916,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         function updateOutline() {
-            if (!controls.isLocked) {
+            if (!controls.isLocked || isMobile) {
                 if (outlineMesh) {
                     scene.remove(outlineMesh);
                     outlineMesh = null;
@@ -812,11 +949,90 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        function onTouchStart(event) {
+            event.preventDefault();
+            for (const touch of event.changedTouches) {
+                const target = touch.target;
+                if (target.closest('#mobile-joystick-area')) {
+                    if (touchState.joystick.id === -1) {
+                        touchState.joystick.id = touch.identifier;
+                    }
+                } else if (target.id === 'mobile-jump-btn') {
+                    if (isFlying) moveUp = true;
+                    else if (canJump) { velocity.y += 6; canJump = false; }
+                } else if (target.id === 'mobile-break-btn') {
+                    onMouseUp({ button: 0 });
+                } else if (target.id === 'mobile-place-btn') {
+                    onMouseUp({ button: 2 });
+                } else if (touchState.camera.id === -1) {
+                    touchState.camera.id = touch.identifier;
+                    touchState.camera.lastX = touch.clientX;
+                    touchState.camera.lastY = touch.clientY;
+                }
+            }
+        }
+
+        function onTouchMove(event) {
+            event.preventDefault();
+            for (const touch of event.changedTouches) {
+                if (touch.identifier === touchState.joystick.id) {
+                    const stick = document.getElementById('mobile-joystick');
+                    const areaRect = document.getElementById('mobile-joystick-area').getBoundingClientRect();
+                    const centerX = areaRect.left + areaRect.width / 2;
+                    const centerY = areaRect.top + areaRect.height / 2;
+                    let dx = touch.clientX - centerX;
+                    let dy = touch.clientY - centerY;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    const maxDist = areaRect.width / 2 - stick.offsetWidth / 2;
+
+                    if (dist > maxDist) {
+                        dx = (dx / dist) * maxDist;
+                        dy = (dy / dist) * maxDist;
+                    }
+                    stick.style.transform = `translate(${dx}px, ${dy}px)`;
+
+                    const deadZone = 0.2;
+                    moveForward = (dy / maxDist) < -deadZone;
+                    moveBackward = (dy / maxDist) > deadZone;
+                    moveLeft = (dx / maxDist) < -deadZone;
+                    moveRight = (dx / maxDist) > deadZone;
+
+                } else if (touch.identifier === touchState.camera.id) {
+                    const movementX = touch.clientX - touchState.camera.lastX;
+                    const movementY = touch.clientY - touchState.camera.lastY;
+
+                    _euler.setFromQuaternion( camera.quaternion );
+                    _euler.y -= movementX * 0.004 * controls.pointerSpeed;
+                    _euler.x -= movementY * 0.004 * controls.pointerSpeed * (controls.invertY ? -1 : 1);
+                    _euler.x = Math.max( _PI_2 - controls.maxPolarAngle, Math.min( _PI_2 - controls.minPolarAngle, _euler.x ) );
+                    camera.quaternion.setFromEuler( _euler );
+
+                    touchState.camera.lastX = touch.clientX;
+                    touchState.camera.lastY = touch.clientY;
+                }
+            }
+        }
+
+        function onTouchEnd(event) {
+            event.preventDefault();
+            for (const touch of event.changedTouches) {
+                if (touch.identifier === touchState.joystick.id) {
+                    touchState.joystick.id = -1;
+                    moveForward = moveBackward = moveLeft = moveRight = false;
+                    document.getElementById('mobile-joystick').style.transform = 'translate(0, 0)';
+                } else if (touch.identifier === touchState.camera.id) {
+                    touchState.camera.id = -1;
+                }
+                if (touch.target.id === 'mobile-jump-btn') {
+                    moveUp = false;
+                }
+            }
+        }
+
         function animate() {
             requestAnimationFrame(animate);
             const time = performance.now();
 
-            // FPS Counter
             frameCount++;
             if (time >= lastFpsUpdateTime + 1000) {
                 fpsCounter.textContent = `FPS: ${frameCount}`;
@@ -832,16 +1048,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 direction.z = Number(moveForward) - Number(moveBackward);
                 direction.x = Number(moveRight) - Number(moveLeft);
-                direction.normalize();
 
+                const flySpeed = 6.5;
+                const walkSpeed = 6.5;
+
+                const forward = new THREE.Vector3();
+                camera.getWorldDirection(forward);
+                
                 if (isFlying) {
-                    const flySpeed = 40.0; // Slower speed for flying
-                    velocity.y -= velocity.y * 10.0 * delta; // Vertical damping
+                    const right = new THREE.Vector3().crossVectors(camera.up, forward).normalize();
+                    const moveDirection = new THREE.Vector3();
+                    moveDirection.add(forward.multiplyScalar(direction.z));
+                    moveDirection.add(right.multiplyScalar(direction.x));
 
-                    if (moveForward || moveBackward) velocity.z -= direction.z * flySpeed * delta;
-                    if (moveLeft || moveRight) velocity.x -= direction.x * flySpeed * delta;
-                    if (moveUp) velocity.y += flySpeed * delta;
-                    if (moveDown) velocity.y -= flySpeed * delta;
+                    if (moveDirection.lengthSq() > 0) {
+                        moveDirection.normalize();
+                    }
+
+                    controls.getObject().position.x += moveDirection.x * flySpeed * delta;
+                    controls.getObject().position.z += moveDirection.z * flySpeed * delta;
+                    
+                    let verticalVelocity = 0;
+                    if (moveUp) verticalVelocity = flySpeed;
+                    if (moveDown) verticalVelocity = -flySpeed;
+                    controls.getObject().position.y += verticalVelocity * delta;
+
                     canJump = false;
                 } else {
                     raycaster.ray.origin.copy(controls.getObject().position);
@@ -849,40 +1080,48 @@ document.addEventListener('DOMContentLoaded', () => {
                     raycaster.far = 0.2;
                     const onObject = raycaster.intersectObjects(objects, true).length > 0;
 
-                    velocity.y -= 9.8 * 30.0 * delta; // Gravity
-
-                    if (moveForward || moveBackward) velocity.z -= direction.z * 80.0 * delta;
-                    if (moveLeft || moveRight) velocity.x -= direction.x * 80.0 * delta;
+                    velocity.y -= 9.8 * 1.0 * delta; // Greatly reduced gravity
 
                     if (onObject) {
                         velocity.y = Math.max(0, velocity.y);
                         canJump = true;
                     }
+                    
+                    forward.y = 0;
+                    if (forward.lengthSq() > 0.0001) {
+                        forward.normalize();
+                    }
+
+                    const right = new THREE.Vector3().crossVectors(camera.up, forward).normalize();
+
+                    const moveDirection = new THREE.Vector3();
+                    moveDirection.add(forward.multiplyScalar(direction.z));
+                    moveDirection.add(right.multiplyScalar(direction.x));
+
+                    if (moveDirection.lengthSq() > 0) {
+                        moveDirection.normalize();
+                    }
+
+                    controls.getObject().position.x += moveDirection.x * walkSpeed * delta;
+                    controls.getObject().position.z += moveDirection.z * walkSpeed * delta;
+                    
+                    controls.getObject().position.y += velocity.y * delta;
                 }
-
-                controls.moveRight(-velocity.x * delta);
-                controls.moveForward(-velocity.z * delta);
-                controls.getObject().position.y += (velocity.y * delta);
-
+                
                 resolveCollisions();
 
-                // --- Respawn if out of bounds or too deep ---
                 const pos = controls.getObject().position;
-                if (
-                    pos.x < worldMinX - 2 || pos.x > worldMaxX + 2 ||
-                    pos.z < worldMinZ - 2 || pos.z > worldMaxZ + 2 ||
-                    pos.y < worldMinY - 2
-                ) {
-                    // Respawn at spawnPoint
+                
+                if (!isFlying && pos.y < 1.0) {
+                    pos.y = 2.2; 
+                    velocity.y = 0; 
+                }
+                
+                if (pos.y < worldMinY - 2) { 
                     pos.copy(spawnPoint);
                     velocity.set(0, 0, 0);
                 }
 
-                if (!isFlying && controls.getObject().position.y < 2.2) {
-                    velocity.y = 0;
-                    controls.getObject().position.y = 2.2;
-                    canJump = true;
-                }
                 updateOutline();
             }
 
