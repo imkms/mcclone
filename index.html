@@ -5,7 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Minecraft Clone with AI Builder</title>
     <style>
-        body { margin: 0; overflow: hidden; font-family: monospace; }
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            font-family: monospace; 
+            touch-action: none; /* Prevents browser touch actions like scroll/zoom */
+        }
         #blocker {
             position: absolute;
             width: 100%;
@@ -13,10 +18,13 @@
             background-color: #3a3a3a;
             background-image: linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.4));
             z-index: 1000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
         #instructions {
             width: 100%;
-            height: 100%;
+            max-width: 400px;
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -45,15 +53,16 @@
         #controls-info {
             font-size: 16px;
             line-height: 1.5;
+            display: none; /* Hidden by default, shown on PC hover */
         }
         #crosshair { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; border: 1px solid white; transform: translate(-50%, -50%); mix-blend-mode: difference; pointer-events: none;}
         #settings {
-            margin-top: 30px;
+            margin-top: 20px;
             background: rgba(0,0,0,0.3);
             padding: 20px;
             border-radius: 5px;
             border: 2px solid #222;
-            width: 250px;
+            width: 280px;
         }
         #settings .setting-item { 
             margin-bottom: 15px; 
@@ -62,6 +71,9 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+        }
+        #settings .setting-item:last-child {
+            margin-bottom: 0;
         }
         /* Minecraft-style Switch */
         .switch-container {
@@ -105,14 +117,24 @@
             transform: translateX(26px);
         }
 
-        #inventory { position: absolute; left: 50%; bottom: 40px; transform: translateX(-50%); display: flex; gap: 10px; background: rgba(0,0,0,0.5); padding: 10px 20px; border-radius: 8px; z-index: 10; border: 2px solid #222;}
+        #inventory { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 8px; z-index: 10; border: 2px solid #222; max-width: 90%;}
         .inv-slot { width: 40px; height: 40px; border: 2px solid #fff; border-radius: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer; background: rgba(255,255,255,0.1); transition: border 0.2s;}
         .inv-slot.selected { border: 2px solid #ff0; background: rgba(255,255,0,0.2);}
         .inv-block { width: 28px; height: 28px; border-radius: 2px; border: 1px solid #222; background-size: cover; }
         #fps-counter {
             position: absolute;
             top: 10px;
-            left: 10px;
+            right: 10px;
+            color: white;
+            text-shadow: 2px 2px #222;
+            font-size: 16px;
+            z-index: 100;
+            pointer-events: none;
+        }
+        #version-number {
+            position: absolute;
+            top: 30px;
+            right: 10px;
             color: white;
             text-shadow: 2px 2px #222;
             font-size: 16px;
@@ -120,19 +142,22 @@
             pointer-events: none;
         }
         #world-controls {
-            position:absolute;
-            top:10px;
-            right:10px;
-            z-index:1001; /* Ensure it's above game but below blocker */
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
         }
         #world-controls button {
             font-size:16px;
             padding:8px 12px;
-            margin-right:6px;
             font-family: monospace;
             cursor: pointer;
             border-radius: 5px;
             border: 1px solid #ccc;
+            background-color: #707070;
+            color: white;
+            border-color: #c6c6c6 #555555 #555555 #c6c6c6;
+            box-shadow: inset 0 0 0 2px #000000;
         }
         /* Gemini AI Builder Modal Styles */
         #ai-builder-modal {
@@ -285,19 +310,13 @@
 </head>
 <body>
     <div id="fps-counter"></div>
+    <div id="version-number">Beta 1.0</div>
     <div id="blocker">
         <div id="instructions">
             <div id="title">Minecraft Clone</div>
             <div id="play-button">Click to play</div>
             <p id="controls-info">
-                WASD = Move<br/>
-                SPACE = Jump / Fly Up<br/>
-                SHIFT = Fly Down<br/>
-                F = Toggle Fly<br/>
-                MOUSE = Look<br/>
-                LEFT CLICK = Destroy Block<br/>
-                RIGHT CLICK = Place Block<br/>
-                1-9 or Mouse Wheel = Select Block
+                ESC = Open Menu
             </p>
             <div id="settings">
                 <div class="setting-item">
@@ -597,7 +616,7 @@
         let outlineMesh = null;
         let lastIntersected = null;
         let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false, canJump = false, isFlying = false, moveUp = false, moveDown = false;
-        let invertStrafe = false; // NEW: state for strafe inversion
+        let invertStrafe = false;
         let prevTime = performance.now();
         const velocity = new THREE.Vector3();
         const direction = new THREE.Vector3();
@@ -620,13 +639,13 @@
         function saveSettings() {
             localStorage.setItem('mcclone_sensitivity', String(controls.pointerSpeed));
             localStorage.setItem('mcclone_invertY', controls.invertY ? '1' : '0');
-            localStorage.setItem('mcclone_invertStrafe', invertStrafe ? '1' : '0'); // NEW
+            localStorage.setItem('mcclone_invertStrafe', invertStrafe ? '1' : '0');
         }
         function loadSettings() {
             return {
                 sensitivity: parseFloat(localStorage.getItem('mcclone_sensitivity')) || 1,
                 invertY: localStorage.getItem('mcclone_invertY') === '1',
-                invertStrafe: localStorage.getItem('mcclone_invertStrafe') === '1' // NEW
+                invertStrafe: localStorage.getItem('mcclone_invertStrafe') === '1'
             };
         }
 
@@ -651,6 +670,7 @@
             const inventoryDiv = document.getElementById('inventory');
             fpsCounter = document.getElementById('fps-counter');
             const menuButton = document.getElementById('menu-btn');
+            const mobileControls = document.getElementById('mobile-controls');
 
             const settings = loadSettings();
             controls.pointerSpeed = settings.sensitivity;
@@ -676,46 +696,6 @@
                 saveSettings();
             });
 
-            // --- Mobile vs PC Setup ---
-            if (isMobile) {
-                document.getElementById('mobile-controls').style.display = 'flex';
-                document.getElementById('crosshair').style.display = 'none';
-                menuButton.style.display = 'block';
-
-                menuButton.addEventListener('click', () => {
-                    controls.unlock();
-                });
-
-                // Override lock/unlock for manual control on mobile
-                controls.lock = () => {
-                    blocker.style.display = 'none';
-                    controls.isLocked = true;
-                };
-                controls.unlock = () => {
-                    blocker.style.display = 'block';
-                    controls.isLocked = false;
-                };
-
-                // Disconnect default mouse listeners for mobile
-                controls.disconnect();
-                
-                // Add touch event listeners
-                document.body.addEventListener('touchstart', onTouchStart, { passive: false });
-                document.body.addEventListener('touchmove', onTouchMove, { passive: false });
-                document.body.addEventListener('touchend', onTouchEnd, { passive: false });
-
-            } else {
-                // PC-specific listeners
-                controls.addEventListener('lock', () => {
-                    instructions.style.display = 'none';
-                    blocker.style.display = 'none';
-                });
-                controls.addEventListener('unlock', () => {
-                    blocker.style.display = 'block';
-                    instructions.style.display = '';
-                });
-            }
-
             scene.add(controls.getObject());
 
             // --- World Save/Load ---
@@ -729,8 +709,51 @@
             document.addEventListener('keyup', onKeyUp);
             document.addEventListener('wheel', onMouseWheel, { passive: false });
             inventoryDiv.addEventListener('click', onInventoryClick);
-            document.addEventListener('mouseup', onMouseUp);
             document.addEventListener('contextmenu', e => e.preventDefault());
+
+            // --- Mobile vs PC Event Setup ---
+            if (isMobile) {
+                document.getElementById('crosshair').style.display = 'none';
+                
+                menuButton.addEventListener('click', () => {
+                    controls.unlock();
+                });
+
+                // Override lock/unlock for manual control on mobile
+                controls.lock = () => {
+                    blocker.style.display = 'none';
+                    mobileControls.style.display = 'flex';
+                    menuButton.style.display = 'block';
+                    controls.isLocked = true;
+                    playButton.textContent = 'Resume';
+                };
+                controls.unlock = () => {
+                    blocker.style.display = 'flex';
+                    mobileControls.style.display = 'none';
+                    menuButton.style.display = 'none';
+                    controls.isLocked = false;
+                };
+
+                // Disconnect default mouse listeners for mobile
+                controls.disconnect();
+                
+                // Add touch event listeners
+                document.body.addEventListener('touchstart', onTouchStart);
+                document.body.addEventListener('touchmove', onTouchMove);
+                document.body.addEventListener('touchend', onTouchEnd);
+
+            } else {
+                document.getElementById('controls-info').style.display = 'block';
+                // PC-specific listeners
+                controls.addEventListener('lock', () => {
+                    blocker.style.display = 'none';
+                });
+                controls.addEventListener('unlock', () => {
+                    blocker.style.display = 'flex';
+                });
+                // Add mouse listener ONLY for PC
+                document.addEventListener('mouseup', onMouseUp);
+            }
 
             raycaster = new THREE.Raycaster(new THREE.Vector3(), new THREE.Vector3(0, -1, 0), 0, 10);
 
@@ -964,6 +987,13 @@
         function onKeyDown(event) {
             if (event.repeat) return;
             switch (event.code) {
+                case 'Escape':
+                    if (controls.isLocked) {
+                        controls.unlock();
+                    } else {
+                        controls.lock();
+                    }
+                    break;
                 case 'KeyW': moveForward = true; break;
                 case 'KeyS': moveBackward = true; break;
                 case 'KeyA': invertStrafe ? moveRight = true : moveLeft = true; break;
@@ -1088,7 +1118,6 @@
         }
 
         function onTouchStart(event) {
-            event.preventDefault();
             if (controls.isLocked) {
                 for (const touch of event.changedTouches) {
                     const target = touch.target;
@@ -1113,7 +1142,6 @@
         }
 
         function onTouchMove(event) {
-            event.preventDefault();
             if (controls.isLocked) {
                 for (const touch of event.changedTouches) {
                     if (touch.identifier === touchState.joystick.id) {
@@ -1166,7 +1194,6 @@
         }
 
         function onTouchEnd(event) {
-            event.preventDefault();
             for (const touch of event.changedTouches) {
                 if (touch.identifier === touchState.joystick.id) {
                     touchState.joystick.id = -1;
